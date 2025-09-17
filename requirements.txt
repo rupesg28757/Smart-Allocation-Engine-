@@ -1,6 +1,7 @@
 flask
 flask-cors
-gunicorn app:app
+gunicorn 
 sqlite3-binary
+
 
 
