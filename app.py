@@ -5,7 +5,7 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend communication
+CORS(app, resources={r"/api/*": {"origins": "*"}})  # Enable CORS for frontend communication
 
 DB = 'allocation.db'
 
@@ -260,3 +260,4 @@ def get_student_allocation(student_id):
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000, debug=True)
+
