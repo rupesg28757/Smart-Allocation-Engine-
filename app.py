@@ -5,11 +5,11 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})  # Enable CORS for frontend communication
+CORS(app)  # Enable CORS for all routes
 
 DB = 'allocation.db'
 
-# Initialize database
+# ====================== Initialize database ======================
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -48,7 +48,7 @@ def init_db():
 
 init_db()
 
-# Helper function
+# ====================== Helper ======================
 def query_db(query, args=(), one=False):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -58,16 +58,30 @@ def query_db(query, args=(), one=False):
     conn.close()
     return (rv[0] if rv else None) if one else rv
 
-# ====================== Registration ======================
+# ====================== Root route ======================
+@app.route('/')
+def home():
+    return jsonify({"message": "Backend is running"})
 
+# ====================== Registration ======================
 @app.route('/api/register/student', methods=['POST'])
 def register_student():
     data = request.json
     try:
         conn = sqlite3.connect(DB)
         c = conn.cursor()
-        c.execute('INSERT INTO students (name, email, password, skills, interests, location_preference, internship_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                  (data['name'], data['email'], data['password'], json.dumps(data['skills']), json.dumps(data['interests']), data['location_preference'], data['internship_type']))
+        c.execute(
+            'INSERT INTO students (name, email, password, skills, interests, location_preference, internship_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (
+                data['name'],
+                data['email'],
+                data['password'],
+                json.dumps(data.get('skills', [])),
+                json.dumps(data.get('interests', [])),
+                data.get('location_preference', ''),
+                data.get('internship_type', '')
+            )
+        )
         conn.commit()
         conn.close()
         return jsonify({'message': 'Student registered successfully'}), 201
@@ -80,8 +94,16 @@ def register_organization():
     try:
         conn = sqlite3.connect(DB)
         c = conn.cursor()
-        c.execute('INSERT INTO organizations (name, email, password, projects, requirements) VALUES (?, ?, ?, ?, ?)',
-                  (data['name'], data['email'], data['password'], json.dumps(data['projects']), json.dumps(data['requirements'])))
+        c.execute(
+            'INSERT INTO organizations (name, email, password, projects, requirements) VALUES (?, ?, ?, ?, ?)',
+            (
+                data['name'],
+                data['email'],
+                data['password'],
+                json.dumps(data.get('projects', [])),
+                json.dumps(data.get('requirements', []))
+            )
+        )
         conn.commit()
         conn.close()
         return jsonify({'message': 'Organization registered successfully'}), 201
@@ -89,7 +111,6 @@ def register_organization():
         return jsonify({'error': 'Email already registered'}), 400
 
 # ====================== Login ======================
-
 @app.route('/api/login/student', methods=['POST'])
 def login_student():
     data = request.json
@@ -99,8 +120,8 @@ def login_student():
             'id': user[0],
             'name': user[1],
             'email': user[2],
-            'skills': json.loads(user[4]),
-            'interests': json.loads(user[5]),
+            'skills': json.loads(user[4]) if user[4] else [],
+            'interests': json.loads(user[5]) if user[5] else [],
             'location_preference': user[6],
             'internship_type': user[7]
         }
@@ -117,15 +138,14 @@ def login_organization():
             'id': user[0],
             'name': user[1],
             'email': user[2],
-            'projects': json.loads(user[4]),
-            'requirements': json.loads(user[5])
+            'projects': json.loads(user[4]) if user[4] else [],
+            'requirements': json.loads(user[5]) if user[5] else []
         }
         return jsonify(user_data)
     else:
         return jsonify({'error': 'Invalid credentials'}), 401
 
 # ====================== Organization updates ======================
-
 @app.route('/api/organization/<int:org_id>/update_projects', methods=['POST'])
 def update_projects(org_id):
     data = request.json
@@ -133,13 +153,13 @@ def update_projects(org_id):
     requirements = data.get('requirements', [])
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute('UPDATE organizations SET projects=?, requirements=? WHERE id=?', (json.dumps(projects), json.dumps(requirements), org_id))
+    c.execute('UPDATE organizations SET projects=?, requirements=? WHERE id=?',
+              (json.dumps(projects), json.dumps(requirements), org_id))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Projects updated successfully'})
 
-# ====================== Dashboard ======================
-
+# ====================== Student/Organization dashboards ======================
 @app.route('/api/student/<int:student_id>', methods=['GET'])
 def get_student(student_id):
     user = query_db('SELECT * FROM students WHERE id=?', (student_id,), one=True)
@@ -148,8 +168,8 @@ def get_student(student_id):
             'id': user[0],
             'name': user[1],
             'email': user[2],
-            'skills': json.loads(user[4]),
-            'interests': json.loads(user[5]),
+            'skills': json.loads(user[4]) if user[4] else [],
+            'interests': json.loads(user[5]) if user[5] else [],
             'location_preference': user[6],
             'internship_type': user[7]
         }
@@ -165,15 +185,14 @@ def get_organization(org_id):
             'id': user[0],
             'name': user[1],
             'email': user[2],
-            'projects': json.loads(user[4]),
-            'requirements': json.loads(user[5])
+            'projects': json.loads(user[4]) if user[4] else [],
+            'requirements': json.loads(user[5]) if user[5] else []
         }
         return jsonify(user_data)
     else:
         return jsonify({'error': 'Organization not found'}), 404
 
 # ====================== Admin ======================
-
 @app.route('/api/admin/data', methods=['GET'])
 def admin_data():
     students = query_db('SELECT id, name, email FROM students')
@@ -184,11 +203,9 @@ def admin_data():
     })
 
 # ====================== Allocation logic ======================
-
 def allocate():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-
     c.execute('DELETE FROM allocations')  # Clear old allocations
 
     c.execute('SELECT * FROM students')
@@ -201,7 +218,7 @@ def allocate():
 
     for student in students:
         student_id = student[0]
-        student_skills = set(json.loads(student[4]))
+        student_skills = set(json.loads(student[4]) if student[4] else [])
         student_location = student[6]
         student_internship_type = student[7]
 
@@ -210,7 +227,7 @@ def allocate():
 
         for org in organizations:
             org_id = org[0]
-            org_projects = json.loads(org[4])
+            org_projects = json.loads(org[4]) if org[4] else []
             org_requirements = json.loads(org[5]) if org[5] else []
 
             for i, project in enumerate(org_projects):
@@ -240,7 +257,6 @@ def run_allocation():
     return jsonify({'message': 'Allocation done', 'allocations': allocations})
 
 # ====================== Get student allocation ======================
-
 @app.route('/api/student/<int:student_id>/allocation', methods=['GET'])
 def get_student_allocation(student_id):
     conn = sqlite3.connect(DB)
@@ -257,7 +273,6 @@ def get_student_allocation(student_id):
         return jsonify({'message': 'No allocation found for this student'}), 404
 
 # ====================== Run Flask ======================
-
 if __name__ == '__main__':
+    # Use 0.0.0.0 for Render deployment
     app.run(host="0.0.0.0", port=5000, debug=True)
-
