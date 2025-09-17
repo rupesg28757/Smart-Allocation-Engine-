@@ -1,0 +1,6 @@
+flask
+flask-cors
+gunicorn app:app
+sqlite3-binary
+
+
